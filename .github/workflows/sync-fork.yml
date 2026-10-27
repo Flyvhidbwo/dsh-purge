@@ -1,0 +1,54 @@
+# ============================================================
+# 定时把 fork 同步到上游（GitHub Actions）
+#
+# 放置位置：你的 fork 仓库根目录  .github/workflows/sync-fork.yml
+# 仓库：https://github.com/Flyvhidbwo/dsh-purge
+# 上游：https://github.com/YuJunZhiXue/dsh-purge
+#
+# 说明：
+#   - 每 3 天 03:17 UTC（北京时间 11:17）运行一次；GitHub 定时任务可能有
+#     几分钟到几十分钟的排队延迟，这是正常的。
+#   - 用普通 merge：能快进就快进；因为本 workflow 文件本身是 fork 的一个提交，
+#     上游更新后会生成一个合并提交（内容不会被覆盖，也不会动你以后加的提交）。
+#   - 同时尝试同步上游 tag（best effort，失败不影响 master）。
+# ============================================================
+name: Sync fork with upstream
+
+on:
+  schedule:
+    - cron: "17 3 */3 * *" # 每 3 天 03:17 UTC
+  workflow_dispatch: {} # Actions 页面上的「Run workflow」手动按钮
+
+permissions:
+  contents: write
+
+concurrency:
+  group: sync-fork
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout fork (master)
+        uses: actions/checkout@v4
+        with:
+          ref: master
+          fetch-depth: 0
+
+      - name: Configure git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: Fetch upstream and merge
+        run: |
+          git remote add upstream https://github.com/YuJunZhiXue/dsh-purge.git
+          git fetch upstream master --tags
+          git merge --no-edit upstream/master
+
+      - name: Push master
+        run: git push origin master
+
+      - name: Push tags (best effort)
+        run: git push origin --tags || echo "标签推送跳过（可能有同名标签已存在，或没有权限）"
